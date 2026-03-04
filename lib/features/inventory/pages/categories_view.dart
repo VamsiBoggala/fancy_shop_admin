@@ -11,7 +11,12 @@ import '../../../shared/widgets/fancy_image.dart';
 
 class CategoriesView extends StatelessWidget {
   final bool isDark;
-  const CategoriesView({super.key, required this.isDark});
+  final String searchQuery;
+  const CategoriesView({
+    super.key,
+    required this.isDark,
+    this.searchQuery = '',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,27 +24,62 @@ class CategoriesView extends StatelessWidget {
       builder: (context, state) {
         if (state is InventoryLoading) {
           return const Center(child: CircularProgressIndicator());
-        } else if (state is InventoryLoaded) {
-          if (state.categories.isEmpty) {
+        }
+        if (state is InventoryLoaded) {
+          final filtered = searchQuery.isEmpty
+              ? state.categories
+              : state.categories
+                    .where((c) => c.name.toLowerCase().contains(searchQuery))
+                    .toList();
+
+          if (filtered.isEmpty) {
             return InventoryEmptyState(
-              title: 'No categories found',
+              title: searchQuery.isEmpty
+                  ? 'No categories yet'
+                  : 'No results for "$searchQuery"',
               icon: Icons.category_outlined,
               isDark: isDark,
             );
           }
-          return GridView.builder(
-            padding: const EdgeInsets.all(28),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 220,
-              mainAxisSpacing: 24,
-              crossAxisSpacing: 24,
-              childAspectRatio: 0.8,
-            ),
-            itemCount: state.categories.length,
-            itemBuilder: (context, index) {
-              final category = state.categories[index];
-              return _CategoryCard(category: category, isDark: isDark);
-            },
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Summary
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: Text(
+                  filtered.length == state.categories.length
+                      ? '${state.categories.length} categories'
+                      : 'Showing ${filtered.length} of ${state.categories.length} categories',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.lightTextSecondary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(24),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    childAspectRatio: 0.85,
+                  ),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    return _CategoryCard(
+                      category: filtered[index],
+                      isDark: isDark,
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         }
         return const SizedBox();
@@ -48,127 +88,223 @@ class CategoriesView extends StatelessWidget {
   }
 }
 
-class _CategoryCard extends StatelessWidget {
+class _CategoryCard extends StatefulWidget {
   final CategoryModel category;
   final bool isDark;
 
   const _CategoryCard({required this.category, required this.isDark});
 
   @override
+  State<_CategoryCard> createState() => _CategoryCardState();
+}
+
+class _CategoryCardState extends State<_CategoryCard> {
+  bool _hovering = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    final c = widget.category;
+    final isDark = widget.isDark;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _hovering
+                ? AppColors.primary.withOpacity(0.4)
+                : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          children: [
-            // Image Section (3 parts)
-            Expanded(
-              flex: 3,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  FancyImage(
-                    imageUrl: category.imageUrl,
-                    borderRadius: 0,
-                    placeholderIcon: Icons.category_rounded,
-                    iconSize: 40,
-                  ),
-                  // Action Buttons Overlay (Edit & Delete)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButtonOverlay(
-                          icon: Icons.edit_rounded,
-                          color: AppColors.primary,
-                          onTap: () => showDialog(
-                            context: context,
-                            builder: (context) =>
-                                AddCategoryDialog(category: category),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButtonOverlay(
-                          icon: Icons.close_rounded,
-                          color: AppColors.error,
-                          onTap: () => confirmInventoryDelete(
-                            context: context,
-                            title: 'Delete Category',
-                            message:
-                                'Are you sure you want to delete "${category.name}"?',
-                            onConfirm: () => context.read<InventoryBloc>().add(
-                              DeleteCategory(category),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: _hovering
+                  ? AppColors.primary.withOpacity(0.08)
+                  : Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+              blurRadius: _hovering ? 20 : 10,
+              offset: const Offset(0, 4),
             ),
-            // Name Section (1 part)
-            Expanded(
-              flex: 1,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurfaceVariant : Colors.white,
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark
-                          ? AppColors.darkBorder
-                          : AppColors.lightBorder,
-                    ),
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            children: [
+              // Image section
+              Expanded(
+                flex: 3,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Text(
-                      category.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: isDark
-                            ? AppColors.darkTextPrimary
-                            : AppColors.lightTextPrimary,
+                    FancyImage(
+                      imageUrl: c.imageUrl,
+                      borderRadius: 0,
+                      placeholderIcon: Icons.category_rounded,
+                      iconSize: 36,
+                    ),
+                    // Gradient overlay at bottom
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 40,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.35),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                    Text(
-                      'Category',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.primary,
-                        letterSpacing: 0.2,
+                    // Actions overlay — shown on hover
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 160),
+                      opacity: _hovering ? 1.0 : 0.0,
+                      child: Container(
+                        color: Colors.black.withOpacity(0.25),
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _CardAction(
+                                icon: Icons.edit_rounded,
+                                label: 'Edit',
+                                color: AppColors.primary,
+                                onTap: () => showDialog(
+                                  context: context,
+                                  builder: (_) =>
+                                      AddCategoryDialog(category: c),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _CardAction(
+                                icon: Icons.delete_outline_rounded,
+                                label: 'Delete',
+                                color: AppColors.error,
+                                onTap: () => confirmInventoryDelete(
+                                  context: context,
+                                  title: 'Delete Category',
+                                  message:
+                                      'Delete "${c.name}"? This cannot be undone.',
+                                  onConfirm: () => context
+                                      .read<InventoryBloc>()
+                                      .add(DeleteCategory(c)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
+              ),
+              // Info section
+              Expanded(
+                flex: 1,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        c.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: isDark
+                              ? AppColors.darkTextPrimary
+                              : AppColors.lightTextPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.label_outline_rounded,
+                            size: 11,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            c.iconName.isNotEmpty ? c.iconName : 'Category',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Card Action Button ────────────────────────────────────────────────────────
+class _CardAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _CardAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
               ),
             ),
           ],

@@ -81,3 +81,13 @@ class DeleteProduct extends InventoryEvent {
   @override
   List<Object?> get props => [product];
 }
+
+/// Quick stock adjustment (+1 / -1) without opening the full edit dialog.
+/// [delta] is positive to increase, negative to decrease.
+class AdjustProductStock extends InventoryEvent {
+  final String productId;
+  final int delta;
+  const AdjustProductStock(this.productId, this.delta);
+  @override
+  List<Object?> get props => [productId, delta];
+}

@@ -21,6 +21,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     on<DeleteProduct>(_onDeleteProduct);
     on<DeleteCategory>(_onDeleteCategory);
     on<DeleteBrand>(_onDeleteBrand);
+    on<AdjustProductStock>(_onAdjustProductStock);
   }
 
   Future<void> _onLoadInventory(
@@ -331,6 +332,69 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
       add(LoadInventory());
     } catch (e) {
       emit(InventoryError(e.toString()));
+    }
+  }
+
+  /// Optimistic stock adjustment with a sync loader:
+  /// 1. Update count instantly in UI.
+  /// 2. Mark product as "pending" → stepper shows a loader.
+  /// 3. Write delta to Firestore atomically.
+  /// 4. Clear "pending" → loader disappears.
+  Future<void> _onAdjustProductStock(
+    AdjustProductStock event,
+    Emitter<InventoryState> emit,
+  ) async {
+    final current = state;
+    if (current is! InventoryLoaded) return;
+
+    // Build updated product list with the adjusted stock value (optimistic)
+    final updatedProducts = current.products.map((p) {
+      if (p.id != event.productId) return p;
+      final newStock = (p.stockQuantity + event.delta).clamp(0, 999999);
+      return ProductModel(
+        id: p.id,
+        name: p.name,
+        imageUrl: p.imageUrl,
+        brandId: p.brandId,
+        brandName: p.brandName,
+        categoryId: p.categoryId,
+        categoryName: p.categoryName,
+        price: p.price,
+        discount: p.discount,
+        stockQuantity: newStock,
+        lastUpdated: p.lastUpdated,
+        searchKeywords: p.searchKeywords,
+      );
+    }).toList();
+
+    // Emit updated count + mark this product as syncing → shows loader in UI
+    final pendingIds = {...current.pendingStockIds, event.productId};
+    emit(
+      InventoryLoaded(
+        products: updatedProducts,
+        categories: current.categories,
+        brands: current.brands,
+        pendingStockIds: pendingIds,
+      ),
+    );
+
+    // Write to Firestore atomically
+    try {
+      await _repository.updateStockDelta(event.productId, event.delta);
+      // Clear pending → loader disappears
+      final clearedIds = Set<String>.from(pendingIds)..remove(event.productId);
+      emit(
+        InventoryLoaded(
+          products: updatedProducts,
+          categories: current.categories,
+          brands: current.brands,
+          pendingStockIds: clearedIds,
+        ),
+      );
+    } catch (e) {
+      // Rollback to original state on failure
+      emit(current);
+      emit(InventoryError('Stock update failed: ${e.toString()}'));
     }
   }
 }

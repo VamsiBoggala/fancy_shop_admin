@@ -61,9 +61,8 @@ class ProductModel extends Equatable {
       'discount': discount,
       'stockQuantity': stockQuantity,
       'lastUpdated': Timestamp.fromDate(lastUpdated),
-      'searchKeywords': searchKeywords.isNotEmpty
-          ? searchKeywords
-          : generateSearchKeywords(name, brandName),
+      // Always regenerate so renames/brand changes keep keywords fresh
+      'searchKeywords': generateSearchKeywords(name, brandName),
     };
   }
 

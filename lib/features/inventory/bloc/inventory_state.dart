@@ -19,14 +19,18 @@ class InventoryLoaded extends InventoryState {
   final List<CategoryModel> categories;
   final List<BrandModel> brands;
 
+  /// IDs of products whose stock is currently being written to Firestore.
+  final Set<String> pendingStockIds;
+
   const InventoryLoaded({
     required this.products,
     required this.categories,
     required this.brands,
+    this.pendingStockIds = const {},
   });
 
   @override
-  List<Object?> get props => [products, categories, brands];
+  List<Object?> get props => [products, categories, brands, pendingStockIds];
 }
 
 class InventoryError extends InventoryState {

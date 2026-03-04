@@ -87,8 +87,36 @@ class InventoryRepository {
         .delete();
   }
 
+  Future<List<CategoryModel>> searchCategories(String query) async {
+    final searchInput = query.toLowerCase().trim();
+    if (searchInput.isEmpty) return getCategories();
+
+    final snapshot = await _firestore
+        .collection(AppConstants.colCategories)
+        .where('searchKeywords', arrayContains: searchInput)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => CategoryModel.fromFirestore(doc.data(), doc.id))
+        .toList();
+  }
+
   Future<void> deleteBrand(String brandId) async {
     await _firestore.collection(AppConstants.colBrands).doc(brandId).delete();
+  }
+
+  Future<List<BrandModel>> searchBrands(String query) async {
+    final searchInput = query.toLowerCase().trim();
+    if (searchInput.isEmpty) return getBrands();
+
+    final snapshot = await _firestore
+        .collection(AppConstants.colBrands)
+        .where('searchKeywords', arrayContains: searchInput)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => BrandModel.fromFirestore(doc.data(), doc.id))
+        .toList();
   }
 
   // ── Products ─────────────────────────────────────────────────────────────
@@ -119,6 +147,13 @@ class InventoryRepository {
         .collection(AppConstants.colProducts)
         .doc(productId)
         .delete();
+  }
+
+  /// Atomically increments (or decrements) stock by [delta] without a read.
+  Future<void> updateStockDelta(String productId, int delta) async {
+    await _firestore.collection(AppConstants.colProducts).doc(productId).update(
+      {'stockQuantity': FieldValue.increment(delta)},
+    );
   }
 
   Future<List<ProductModel>> searchProducts(String query) async {
